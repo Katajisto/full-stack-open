@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from "react";
 import ReactDOM from "react-dom";
 import axios from 'axios'
+import personService from './services/persons'
+import "./index.css"
 
 const Filter = (props) => {
   return (
@@ -26,9 +28,18 @@ const PersonForm = (props) => {
 }
 
 const PersonList = (props) => {
+
+  const deleteNumber = (id, name) => {
+    return (() => {
+      if(window.confirm(`Delete ${name}?`)) {
+        props.delHandler(id)
+      }
+    });
+  }
+
   console.log(props.persons)
   const filteredPersons = props.persons.filter(x => x.name.toLowerCase().includes(props.search.toLowerCase()))
-  const personsList = filteredPersons.map(x => <li key={x.name}>{x.name} {x.number}</li>)
+  const personsList = filteredPersons.map(x => <li key={x.id}>{x.name} {x.number} <button onClick={deleteNumber(x.id, x.name)}>DELETE</button></li>)
   return (
     <>
       <ul>
@@ -38,15 +49,42 @@ const PersonList = (props) => {
   )
 }
 
+const SuccessNotification = ({ message }) => {
+  if(message === null) {
+    return null
+  }
+
+  return (
+    <div className="success-notification">
+      {message}
+    </div>
+  )
+}
+
+const ErrorNotification = ({ message }) => {
+  if(message === null) {
+    return null
+  }
+
+  return (
+    <div className="error-notification">
+      {message}
+    </div>
+  )
+}
+
+
 const App = () => {
-  const [persons, setPersons] = useState([{ name: "Arto Hellas", number: "040-123456" }]);
+  const [persons, setPersons] = useState([{ name: "Arto Hellas", number: "040-123456", id: '1' }]);
   const [search, setSearch] = useState("")
   const [newName, setNewName] = useState("");
   const [newNumber, setNewNumber] = useState("")
+  const [errorMessage, setErrorMessage] = useState(null);
+  const [successMessage, setSuccessMessage] = useState(null);
 
   useEffect(() => {
-    axios.get("http://localhost:3001/persons").then(response => {
-      setPersons(response.data)
+    personService.getAll().then(response => {
+      setPersons(response)
     })
   }, [])
 
@@ -64,27 +102,68 @@ const App = () => {
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (persons.filter(e => e.name === newName).length > 0) {
-      alert(`${newName} is already added to phonebook`);
+    const filterTest = persons.filter(p => p.name === newName)
+    if (filterTest.length === 1) {
+      if(window.confirm(`${newName} is already added to the phonebook, replace number?`)) {
+        const newPerson = {...filterTest[0], number: newNumber}
+        personService.update(filterTest[0].id, newPerson).then(
+          (data) => {
+            setPersons(persons.map(person => person.id === filterTest[0].id ? data : person))
+            successNotify(`Changed ${newName}'s number`)
+          }
+        ).catch(error =>
+          {
+            errorNotify(`Person ${newName} was already deleted from the server`)
+        })
+        
+        setNewName("")
+        setNewNumber("");
+      }
+    
+      
       return;
     }
-    setPersons(persons.concat({ name: newName, number: newNumber }));
-    axios.post("http://localhost:3001/persons").then(response => console.log(response))
+
+    personService.create({name: newName, number: newNumber}).then(response => setPersons(persons.concat(response)))
+    successNotify(`Added ${newName}`)
     setNewName("")
     setNewNumber("");
+
   }
 
+  const errorNotify = (message) => {
+    setErrorMessage(message);
+    setTimeout(() => {
+      setErrorMessage(null);
+    }, 5000)
+  }
+  
+
+  const successNotify = (message) => {
+    setSuccessMessage(message);
+    setTimeout(() => {
+      setSuccessMessage(null)
+    }, 5000)
+  }
+
+  const removePerson = (id) => {
+    personService.remove(id).then(response => console.log(response))
+    successNotify(`Removed ${persons.find(element => element.id == id).name}`)
+    setPersons(persons.filter(person => person.id !== id))
+  }
 
 
 
   return (
     <div>
+      <SuccessNotification message={successMessage}/>
+      <ErrorNotification message={errorMessage}/>
       <h2>Phonebook</h2>
       <Filter value={search} handle={handleSearch}></Filter>
       <h2>Add new number:</h2>
       <PersonForm number={newNumber} handleNumber={handleNumberChange} handleName={handleChange} handleForm={handleSubmit} name={newName}></PersonForm>
       <h2>Numbers</h2>
-      <PersonList search={search} persons={persons} />
+      <PersonList search={search} persons={persons} delHandler={removePerson} />
     </div>
   );
 };

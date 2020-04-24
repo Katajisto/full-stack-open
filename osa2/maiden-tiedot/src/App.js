@@ -50,6 +50,7 @@ function App() {
 
   function buttonHandler(name) {
     return (() => {
+      if(window.confirm(`Delete ${name}?`))
       setSearch(name);
     })
   }
